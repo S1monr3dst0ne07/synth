@@ -9,6 +9,7 @@
 #include <string.h>
 #include <poll.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -52,21 +53,72 @@ void init()
 	strcpy(packet.name, "main");
 }
 
+
+
+
+typedef struct voice_s
+{
+	// both 7 bits
+	uint8_t number;
+	uint8_t vel;
+
+	double freq;
+	double mag; // in [0, 1]
+
+	struct voice_s* next;
+} voice_t;
+
+voice_t root;
+
+
+double synth_sample(double sample_time)
+	// time in seconds to ampl in [-1, 1]
+{
+	voice_t* iter = root.next;
+	size_t count = 0;
+	double sum = 0;
+
+	while (iter)
+	{
+		double freq = 100 * iter->number;
+		double freq_time = sample_time * freq;
+		double sample_ampl = sin(freq_time * 3.1415926);
+
+		sum += sample_ampl * iter->mag;
+
+		iter = iter->next;
+		count++;
+	}
+
+	return sum / (double)count;
+}
+
 void synth_packet()
 {
 	static uint64_t index = 0;
 	for (size_t i = 0; i < 256; i++)
 	{
 		double sample_time = index++ / (double)S_RATE;
-		double freq_time   = (sample_time * 100.0);
-	
-		//double ampl = sin(freq_time * 3.14);
-		//packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
+		double ampl = synth_sample(sample_time);
+		packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
 	}
 
 	packet.frame_number = frame_count++;
 	send(pcm_sock, &packet, sizeof(packet),0);
 }
+
+voice_t* find_voice(uint8_t number)
+{
+	voice_t* iter = root.next;
+	while (iter)
+	{
+		if (iter->number == number) 
+			return iter;
+		iter = iter->next;
+	}
+	return NULL;
+}
+
 
 void process_midi()
 {
@@ -79,8 +131,9 @@ void process_midi()
 
 	while (true)
 	{
+
 		// check if new midi data is present
-		if(poll(&pfd, 1, -1) < 1) return;
+		if(poll(&pfd, 1, 0) < 1) return;
 
 		// midi "status bytes"
 		if(read(STDIN_FILENO, &bytes, 3) < 1) return;
@@ -89,10 +142,46 @@ void process_midi()
 		uint8_t action = func >> 4;
 		uint8_t chan   = func & 0x0f;
 
-		printf("%d\n", action);
+		//https://drive.google.com/file/d/1I-bH8zhfS37fnLzV-xnonOCYZycaGzbn/view
+		switch (action)
+		{
+			case 0b1001: { // note hit
+				voice_t* new = malloc(sizeof(voice_t));
+				new->next = root.next;
+				root.next = new;
 
+				new->number = bytes[1];
+				new->vel    = bytes[2];
+				new->mag    = 1.0;
+			}; break;
+
+			case 0b1000: { // note release
+				voice_t* node = find_voice(bytes[1]);
+				node->mag = 0.0;
+			}; break;
+		}
 	}
 }
+
+void gc_voices()
+{
+	voice_t* iter = &root;
+
+	while (iter->next)
+	{
+		if (iter->next->mag < 0.001)
+			// remove dead voice
+		{
+			voice_t* dead = iter->next;
+			iter->next = dead->next;
+			free(dead);
+		}
+		else
+			iter = iter->next;
+	}
+
+}
+
 
 int main()
 {
@@ -111,6 +200,10 @@ int main()
 
 		// synthesize and upload more pcm data
 		synth_packet();
+
+		// remove dead voices
+		gc_voices();
+
 
 		// compute ABSTIME of next frame
 		next.tv_nsec += interval;
