@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include <poll.h>
+#include <unistd.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -43,12 +44,6 @@ void init()
 	pcm_sock = socket(AF_INET, SOCK_DGRAM, 0);
 	connect(pcm_sock, (struct sockaddr*)&addr, sizeof(addr));
 
-	midi_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	addr.sin_family      = AF_INET;
-	addr.sin_port        = htons(21928);
-	addr.sin_addr.s_addr = inet_addr("225.0.0.10");
-	connect(midi_sock, (struct sockaddr*)&addr, sizeof(addr));
-
 	packet.magic = *(uint32_t*)"VBAN";
 	packet.sample_rate  = 0x03; // 48 kHz, VBAN_PROTOCOL_AUDIO
 	packet.sample_count = 0xff; // S_COUNT - 1
@@ -65,8 +60,8 @@ void synth_packet()
 		double sample_time = index++ / (double)S_RATE;
 		double freq_time   = (sample_time * 100.0);
 	
-		double ampl = sin(freq_time * 3.14);
-		packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
+		//double ampl = sin(freq_time * 3.14);
+		//packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
 	}
 
 	packet.frame_number = frame_count++;
@@ -76,14 +71,25 @@ void synth_packet()
 void process_midi()
 {
 	struct pollfd pfd = {
-		.fd = midi_sock,
+		.fd = STDIN_FILENO,
 		.events = POLLIN,
 	};
+
+	static uint8_t bytes[3];
 
 	while (true)
 	{
 		// check if new midi data is present
-		if(poll(&pfd, 1, 0) != 1) return;
+		if(poll(&pfd, 1, -1) < 1) return;
+
+		// midi "status bytes"
+		if(read(STDIN_FILENO, &bytes, 3) < 1) return;
+
+		uint8_t func = bytes[0];
+		uint8_t action = func >> 4;
+		uint8_t chan   = func & 0x0f;
+
+		printf("%d\n", action);
 
 	}
 }
@@ -101,7 +107,7 @@ int main()
 	while (true)
 	{
 		// process incoming midi commands
-		//process_midi();
+		process_midi();
 
 		// synthesize and upload more pcm data
 		synth_packet();
