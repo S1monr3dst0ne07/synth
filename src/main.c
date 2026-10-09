@@ -1,6 +1,6 @@
 
 
-#include <sys/time.h>
+#include <time.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -16,10 +16,6 @@
 #define S_LENG (1.0 / S_RATE)
 #define S_LENG_USEC (S_LENG * 1000000)
 #define S_COUNT (256)
-
-uint32_t sample_index = 0;
-uint64_t last = 0;
-
 
 uint frame_count;
 struct
@@ -59,39 +55,45 @@ void upload()
 		(struct sockaddr*)&dest_addr, sizeof(dest_addr));
 }
 
-void process(uint64_t upoint)
+
+void process()
 {
-	double utime = upoint / 1000000.0;
-	double ufreq = (utime * 1000.0);
-
-	double ampl = sin(ufreq * 3.14);
-	packet.samples[sample_index++] = (int16_t)(ampl * ((1 << 15) - 1));
-
-	if (sample_index > S_COUNT)
+	static uint64_t index = 0;
+	for (size_t i = 0; i < 256; i++)
 	{
-		sample_index = 0;
-		upload();
+		double sample_time = index++ / (double)S_RATE;
+		double freq_time   = (sample_time * 100.0);
+	
+		double ampl = sin(freq_time * 3.14);
+		packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
 	}
+	upload();
 }
+
 
 int main()
 {
-	struct timeval tv;
-	static double point = 0.0;
-
 	init();
+
+	const uint64_t bil = 1000000000L;
+	const uint64_t interval = (bil / S_RATE) * 256;
+
+	struct timespec next;
+	clock_gettime(CLOCK_MONOTONIC, &next);
 
 	while (true)
 	{
-		gettimeofday(&tv, NULL);
-		uint64_t delta = tv.tv_usec - last;
-		if (delta < S_LENG_USEC) continue;
-		last = tv.tv_usec;
+		process();
 
-		process(last);
+		next.tv_nsec += interval;
+		if (next.tv_nsec > bil)
+		{
+			next.tv_nsec -= bil;
+			next.tv_sec  += 1;
+		}
+
+		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
 	}
-
-
 }
 
 
