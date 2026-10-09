@@ -65,10 +65,13 @@ typedef struct voice_s
 	double freq;
 	double mag; // in [0, 1]
 
+	bool released;
 	struct voice_s* next;
 } voice_t;
 
-voice_t root;
+voice_t root = {
+	.next = NULL
+};
 
 
 void compute_voice_freq(voice_t* node)
@@ -81,6 +84,23 @@ void compute_voice_freq(voice_t* node)
 
 }
 
+void update_voice(voice_t* node)
+{
+	// 1.0 -> raise in 200ms
+	// 48000 * 0.2 = 9600
+	double vel_norm = (node->vel + 1) / 128.0;
+	double vel_prop = vel_norm / 9600.0;
+
+	if (!node->released && node->mag < 1.0)
+		node->mag += vel_prop;
+
+	if (node->released)
+		node->mag -= vel_prop;
+
+	if (node->mag > 1.0) node->mag = 1.0;
+	if (node->mag < 0.0) node->mag = 0.0;
+		
+}
 
 double synth_sample(double sample_time)
 	// time in seconds to ampl in [-1, 1]
@@ -91,6 +111,8 @@ double synth_sample(double sample_time)
 
 	while (iter)
 	{
+		update_voice(iter);
+
 		double freq_time = sample_time * iter->freq;
 		double sample_ampl = sin(freq_time * 3.1415926);
 
@@ -156,20 +178,21 @@ void process_midi()
 		switch (action)
 		{
 			case 0b1001: { // note hit
-				voice_t* new = malloc(sizeof(voice_t));
-				new->next = root.next;
-				root.next = new;
+				voice_t* node = malloc(sizeof(voice_t));
+				node->next = root.next;
+				root.next = node;
 
-				new->number = bytes[1];
-				new->vel    = bytes[2];
-				new->mag    = 1.0;
+				node->number = bytes[1];
+				node->vel    = bytes[2];
+				node->mag    = 0.0;
+				node->released = false;
 
-				compute_voice_freq(new);
+				compute_voice_freq(node);
 			}; break;
 
 			case 0b1000: { // note release
 				voice_t* node = find_voice(bytes[1]);
-				node->mag = 0.0;
+				node->released = true;
 			}; break;
 		}
 	}
@@ -178,18 +201,22 @@ void process_midi()
 void gc_voices()
 {
 	voice_t* iter = &root;
+	voice_t* prev;
 
 	while (iter->next)
 	{
-		if (iter->next->mag < 0.001)
+		prev = iter;
+		iter = iter->next;
+
+		if (iter->released && iter->mag < 0.001)
 			// remove dead voice
 		{
-			voice_t* dead = iter->next;
-			iter->next = dead->next;
+			voice_t* dead = iter;
+			prev->next = iter->next;
 			free(dead);
+
+			iter = prev;
 		}
-		else
-			iter = iter->next;
 	}
 
 }
