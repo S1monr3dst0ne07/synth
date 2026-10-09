@@ -106,7 +106,8 @@ double synth_sample(double sample_time)
 	// time in seconds to ampl in [-1, 1]
 {
 	voice_t* iter = root.next;
-	size_t count = 0;
+
+	double total = 0;
 	double sum = 0;
 
 	while (iter)
@@ -116,13 +117,14 @@ double synth_sample(double sample_time)
 		double freq_time = sample_time * iter->freq;
 		double sample_ampl = sin(freq_time * 3.1415926);
 
-		sum += sample_ampl * iter->mag;
+		sum   += sample_ampl * iter->mag;
+		total += iter->mag;
 
 		iter = iter->next;
-		count++;
 	}
 
-	return sum / (double)count;
+	if (total < 1.0) total = 1.0;
+	return sum / total;
 }
 
 void synth_packet()
