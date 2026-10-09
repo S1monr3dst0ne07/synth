@@ -71,6 +71,17 @@ typedef struct voice_s
 voice_t root;
 
 
+void compute_voice_freq(voice_t* node)
+{
+	// 440 Hz * 2^((n-69)/12)
+
+	node->freq = 440 * pow(2.0, 
+		(node->number - 69)/12.0
+	);
+
+}
+
+
 double synth_sample(double sample_time)
 	// time in seconds to ampl in [-1, 1]
 {
@@ -80,8 +91,7 @@ double synth_sample(double sample_time)
 
 	while (iter)
 	{
-		double freq = 100 * iter->number;
-		double freq_time = sample_time * freq;
+		double freq_time = sample_time * iter->freq;
 		double sample_ampl = sin(freq_time * 3.1415926);
 
 		sum += sample_ampl * iter->mag;
@@ -153,6 +163,8 @@ void process_midi()
 				new->number = bytes[1];
 				new->vel    = bytes[2];
 				new->mag    = 1.0;
+
+				compute_voice_freq(new);
 			}; break;
 
 			case 0b1000: { // note release
