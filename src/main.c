@@ -11,50 +11,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
 #define S_RATE (44100)
-#define S_COUNT (256)
-
-uint frame_count;
-struct __attribute__((packed))
-{
-	uint32_t magic;
-	uint8_t  sample_rate;
-	uint8_t  sample_count;
-	uint8_t  channel;
-	uint8_t  flags;
-	char     name[16];
-	uint32_t frame_number;
-	int16_t  samples[S_COUNT];
-} packet;
-
-
-int pcm_sock;
-int midi_sock;
-
-void init()
-{
-	struct sockaddr_in addr;
-
-	addr.sin_family      = AF_INET;
-	addr.sin_port        = htons(6980);
-	addr.sin_addr.s_addr = inet_addr("192.168.1.10");
-	pcm_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	connect(pcm_sock, (struct sockaddr*)&addr, sizeof(addr));
-
-	packet.magic = *(uint32_t*)"VBAN";
-	packet.sample_rate  = 0x10; // 44.1 kHz, VBAN_PROTOCOL_AUDIO
-	packet.sample_count = 0xff; // S_COUNT - 1
-	packet.channel      = 0x00; // channel 1
-	packet.flags        = 0x01; // VBAN_DATATYPE_INT16 | VBAN_CODEC_PCM
-	strcpy(packet.name, "main");
-}
-
-
-
 
 typedef struct voice_s
 {
@@ -103,7 +60,7 @@ void update_voice(voice_t* node)
 }
 
 
-double synth_sample(double sample_time)
+int16_t synth_sample(double sample_time)
 {
 	voice_t* iter = root.next;
 
@@ -126,22 +83,10 @@ double synth_sample(double sample_time)
 	if (total < 1.0) total = 1.0;
 	double sample = sum / total;
 
-	return sample;
+	int16_t sample_quant = (int16_t)(sample * ((1 << 15) - 1));
+	return sample_quant;
 }
 
-void synth_packet()
-{
-	static uint64_t index = 0;
-	for (size_t i = 0; i < 256; i++)
-	{
-		double sample_time = index++ / (double)S_RATE;
-		double ampl = synth_sample(sample_time);
-		packet.samples[i] = (int16_t)(ampl * ((1 << 15) - 1));
-	}
-
-	packet.frame_number = frame_count++;
-	send(pcm_sock, &packet, sizeof(packet),0);
-}
 
 voice_t* find_voice(uint8_t number)
 {
@@ -233,25 +178,27 @@ void gc_voices()
 
 int main()
 {
-	init();
-
 	const uint64_t bil = 1000000000L;
-	const uint64_t interval = (bil / S_RATE) * 256;
+	const uint64_t interval = bil / S_RATE;
 
 	struct timespec next;
 	clock_gettime(CLOCK_MONOTONIC, &next);
 
+	static uint32_t index = 0;
+
 	while (true)
 	{
+		double sample_time = index++ / (double)S_RATE;
+
 		// process incoming midi commands
 		process_midi();
 
 		// synthesize and upload more pcm data
-		synth_packet();
+		int16_t ampl = synth_sample(sample_time);
+		fwrite(&ampl, 2, 1, stdout);
 
 		// remove dead voices
 		gc_voices();
-
 
 		// compute ABSTIME of next frame
 		next.tv_nsec += interval;
