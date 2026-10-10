@@ -244,7 +244,7 @@ void process_midi(double time)
 	}
 }
 
-void gc_voices()
+void gc()
 {
 	note_t* iter = &root;
 	note_t* prev;
@@ -254,7 +254,7 @@ void gc_voices()
 		prev = iter;
 		iter = iter->next;
 
-		if (iter->state == FSM_RELEASE)
+		if (iter->state == FSM_DEAD)
 		{
 			note_t* dead = iter;
 			prev->next = iter->next;
@@ -282,6 +282,7 @@ int main()
 		double sample_time = index++ / (double)RATE;
 
 		process_midi(sample_time);
+		gc();
 
 		int16_t ampl = synth_sample(sample_time);
 		fwrite(&ampl, 2, 1, stdout);
