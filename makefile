@@ -4,4 +4,4 @@ run: build
 	 adapt/virt-keyboard.sh | ./main | ./adapt/vban
 
 build:
-	gcc -g3 src/main.c -o main -lm
+	gcc -g3 main.c -o main -lm

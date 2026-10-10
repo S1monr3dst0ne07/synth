@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define S_RATE (44100)
+#define RATE (44100)
 
 typedef struct voice_s
 {
@@ -43,10 +43,10 @@ void compute_voice_freq(voice_t* node)
 
 void update_voice(voice_t* node)
 {
-	// 1.0 -> raise in 200ms
-	// 48000 * 0.2 = 9600
+	// 1.0 -> raise in 100ms
+	// 48000 * 0.1 = 4800
 	double vel_norm = (node->vel + 1) / 128.0;
-	double vel_prop = vel_norm / 9600.0;
+	double vel_prop = vel_norm / 4800.0;
 
 	if (!node->released && node->mag < 1.0)
 		node->mag += vel_prop;
@@ -72,7 +72,8 @@ int16_t synth_sample(double sample_time)
 		update_voice(iter);
 
 		double freq_time = sample_time * iter->freq;
-		double sample_ampl = sin(freq_time * 3.1415926);
+		double sample_ampl = sin(freq_time * 3.1415926 * 2);
+		//double sample_ampl = sin(freq_time * 3.1415926 * 2) > 0 ? 1.0 : -1.0;
 
 		sum   += sample_ampl * iter->mag;
 		total += iter->mag;
@@ -179,7 +180,7 @@ void gc_voices()
 int main()
 {
 	const uint64_t bil = 1000000000L;
-	const uint64_t interval = bil / S_RATE;
+	const uint64_t interval = bil / RATE;
 
 	struct timespec next;
 	clock_gettime(CLOCK_MONOTONIC, &next);
@@ -188,17 +189,13 @@ int main()
 
 	while (true)
 	{
-		double sample_time = index++ / (double)S_RATE;
+		double sample_time = index++ / (double)RATE;
 
-		// process incoming midi commands
 		process_midi();
+		gc_voices();
 
-		// synthesize and upload more pcm data
 		int16_t ampl = synth_sample(sample_time);
 		fwrite(&ampl, 2, 1, stdout);
-
-		// remove dead voices
-		gc_voices();
 
 		// compute ABSTIME of next frame
 		next.tv_nsec += interval;
