@@ -15,7 +15,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define S_RATE (48000)
+#define S_RATE (44100)
 #define S_COUNT (256)
 
 uint frame_count;
@@ -46,7 +46,7 @@ void init()
 	connect(pcm_sock, (struct sockaddr*)&addr, sizeof(addr));
 
 	packet.magic = *(uint32_t*)"VBAN";
-	packet.sample_rate  = 0x03; // 48 kHz, VBAN_PROTOCOL_AUDIO
+	packet.sample_rate  = 0x10; // 44.1 kHz, VBAN_PROTOCOL_AUDIO
 	packet.sample_count = 0xff; // S_COUNT - 1
 	packet.channel      = 0x00; // channel 1
 	packet.flags        = 0x01; // VBAN_DATATYPE_INT16 | VBAN_CODEC_PCM
@@ -102,8 +102,8 @@ void update_voice(voice_t* node)
 		
 }
 
+
 double synth_sample(double sample_time)
-	// time in seconds to ampl in [-1, 1]
 {
 	voice_t* iter = root.next;
 
@@ -124,7 +124,9 @@ double synth_sample(double sample_time)
 	}
 
 	if (total < 1.0) total = 1.0;
-	return sum / total;
+	double sample = sum / total;
+
+	return sample;
 }
 
 void synth_packet()
@@ -180,19 +182,24 @@ void process_midi()
 		switch (action)
 		{
 			case 0b1001: { // note hit
+				uint8_t vel = bytes[2];
+
+				// if hit with vel 0, interprete as release
+				if (vel == 0) goto release;
+
 				voice_t* node = malloc(sizeof(voice_t));
 				node->next = root.next;
 				root.next = node;
 
 				node->number = bytes[1];
-				node->vel    = bytes[2];
+				node->vel    = vel;
 				node->mag    = 0.0;
 				node->released = false;
 
 				compute_voice_freq(node);
 			}; break;
 
-			case 0b1000: { // note release
+			case 0b1000: release: { // note release
 				voice_t* node = find_voice(bytes[1]);
 				node->released = true;
 			}; break;
