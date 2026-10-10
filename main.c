@@ -13,85 +13,177 @@
 
 #define RATE (44100)
 
-typedef struct voice_s
+// only one envelope
+
+const double TAU = 2 * 3.1315926;
+
+
+typedef struct
 {
-	// both 7 bits
-	uint8_t number;
-	uint8_t vel;
+	double time_attack;
+	double time_decay;
+	double time_release;
 
-	double freq;
-	double mag; // in [0, 1]
+	double ampl_sustain;
+	double ampl_start;
+} env_t;
 
-	bool released;
-	struct voice_s* next;
-} voice_t;
+env_t env_main = {
+	.time_attack  = 0.1,
+	.time_decay   = 0.1,
+	.time_release = 0.2,
 
-voice_t root = {
-	.next = NULL
+	.ampl_sustain = 0.8,
+	.ampl_start   = 1.0,
 };
 
 
-void compute_voice_freq(voice_t* node)
+
+
+typedef enum
+{
+	FSM_ATTACK,
+	FSM_DECAY,
+	FSM_SUSTAIN,
+	FSM_RELEASE,
+	FSM_DEAD,
+} fsm_t;
+
+
+typedef struct note_s
+{
+	//on midi scale
+	uint8_t number; 
+
+	//where are we?
+	fsm_t state;
+
+	// refernce time.
+	double time;
+
+	// note held or released.
+	bool released;
+
+	struct note_s* next;
+} note_t;
+
+note_t root = { .next = NULL };
+
+
+double scale_to_freq(uint8_t number)
 {
 	// 440 Hz * 2^((n-69)/12)
-
-	node->freq = 440 * pow(2.0, 
-		(node->number - 69)/12.0
-	);
-
-}
-
-void update_voice(voice_t* node)
-{
-	// 1.0 -> raise in 100ms
-	// 48000 * 0.1 = 4800
-	double vel_norm = (node->vel + 1) / 128.0;
-	double vel_prop = vel_norm / 4800.0;
-
-	if (!node->released && node->mag < 1.0)
-		node->mag += vel_prop;
-
-	if (node->released)
-		node->mag -= vel_prop;
-
-	if (node->mag > 1.0) node->mag = 1.0;
-	if (node->mag < 0.0) node->mag = 0.0;
-		
+	return 440 * pow(2.0, (number - 69)/12.0);
 }
 
 
-int16_t synth_sample(double sample_time)
+typedef enum
 {
-	voice_t* iter = root.next;
+	OSC_SINE,
+	OSC_SQUARE,
+	OSC_TRIANGLE,
+} osc_type;
 
-	double total = 0;
-	double sum = 0;
+double oscilator(double time, double freq, osc_type type, double low_freq, double low_ampl)
+{
+	double skew = (freq * TAU) + low_ampl * sin(low_freq * TAU);
+	double mod  = skew * time;
+
+	switch (type)
+	{
+		case OSC_SINE:
+			return sin(mod);
+		case OSC_SQUARE:
+			return sin(mod) > 0 ? 1.0 : -1.0;
+		case OSC_TRIANGLE:
+			return asin(sin(mod)) / TAU;
+			
+	}
+
+}
+
+double env_lookup_time(fsm_t state, env_t* env)
+{
+	switch (state)
+	{
+		case FSM_ATTACK:  return env->time_attack;
+		case FSM_DECAY:   return env->time_decay;
+		case FSM_SUSTAIN: return -1.0; // doesn't have time
+		case FSM_RELEASE: return env->time_release;
+	}
+}
+
+void update(double time, note_t* node, env_t* env)
+	// make sure we're synched.
+{
+	double elaps = time - node->time;
+	double limit = env_lookup_time(node->state, env);
+
+	bool time_trigger = (elaps > limit && limit > 0);
+	bool play_trigger = (node->state == FSM_SUSTAIN && node->released);
+
+	if (time_trigger || play_trigger)
+	{
+		node->time = time; // update reference time
+		node->state++;
+	}
+}
+
+double ampl(double time, note_t* node, env_t* env)
+{
+	double elaps = time - node->time;
+	double limit = env_lookup_time(node->state, env);
+	double perc = elaps / limit;
+
+	switch (node->state)
+	{
+		case FSM_ATTACK : return perc * env->ampl_start;
+		case FSM_DECAY  : return env->ampl_start - (perc * (env->ampl_start + env->ampl_sustain));
+		case FSM_SUSTAIN: return env->ampl_sustain;
+		case FSM_RELEASE: return env->ampl_sustain * (1.0 - perc);
+		case FSM_DEAD   : return 0.0;
+	}
+}
+
+double synth_note(double time, note_t* node, env_t* env)
+{
+	update(time, node, env);
+	if (node->state == FSM_DEAD) return 0.0;
+
+	double amplitude = ampl(time, node, env);
+
+	double freq      = scale_to_freq(node->number);
+	double sound     = oscilator(time, freq, OSC_SINE, 0, 0);
+	
+	return amplitude * sound;
+}
+
+
+int16_t synth_sample(double time)
+{
+	note_t* iter = root.next;
+
+	double count = 0;
+	double sum   = 0;
 
 	while (iter)
 	{
-		update_voice(iter);
-
-		double freq_time = sample_time * iter->freq;
-		double sample_ampl = sin(freq_time * 3.1415926 * 2);
-		//double sample_ampl = sin(freq_time * 3.1415926 * 2) > 0 ? 1.0 : -1.0;
-
-		sum   += sample_ampl * iter->mag;
-		total += iter->mag;
+		sum += synth_note(time, iter, &env_main);
+		count += 1.0;
 
 		iter = iter->next;
 	}
 
-	if (total < 1.0) total = 1.0;
-	double sample = sum / total;
+	double sample = sum / count;
 
 	int16_t sample_quant = (int16_t)(sample * ((1 << 15) - 1));
 	return sample_quant;
 }
 
 
-voice_t* find_voice(uint8_t number)
+note_t* find_note(uint8_t number)
 {
-	voice_t* iter = root.next;
+	note_t* iter = root.next;
 	while (iter)
 	{
 		if (iter->number == number) 
@@ -102,7 +194,7 @@ voice_t* find_voice(uint8_t number)
 }
 
 
-void process_midi()
+void process_midi(double time)
 {
 	struct pollfd pfd = {
 		.fd = STDIN_FILENO,
@@ -133,20 +225,19 @@ void process_midi()
 				// if hit with vel 0, interprete as release
 				if (vel == 0) goto release;
 
-				voice_t* node = malloc(sizeof(voice_t));
+				note_t* node   = malloc(sizeof(note_t));
+				node->number   = bytes[1];
+				node->state    = FSM_ATTACK;
+				node->time     = time;
+				node->released = false;
+
 				node->next = root.next;
 				root.next = node;
 
-				node->number = bytes[1];
-				node->vel    = vel;
-				node->mag    = 0.0;
-				node->released = false;
-
-				compute_voice_freq(node);
 			}; break;
 
 			case 0b1000: release: { // note release
-				voice_t* node = find_voice(bytes[1]);
+				note_t* node = find_note(bytes[1]);
 				node->released = true;
 			}; break;
 		}
@@ -155,18 +246,17 @@ void process_midi()
 
 void gc_voices()
 {
-	voice_t* iter = &root;
-	voice_t* prev;
+	note_t* iter = &root;
+	note_t* prev;
 
 	while (iter->next)
 	{
 		prev = iter;
 		iter = iter->next;
 
-		if (iter->released && iter->mag < 0.001)
-			// remove dead voice
+		if (iter->state == FSM_RELEASE)
 		{
-			voice_t* dead = iter;
+			note_t* dead = iter;
 			prev->next = iter->next;
 			free(dead);
 
@@ -191,8 +281,7 @@ int main()
 	{
 		double sample_time = index++ / (double)RATE;
 
-		process_midi();
-		gc_voices();
+		process_midi(sample_time);
 
 		int16_t ampl = synth_sample(sample_time);
 		fwrite(&ampl, 2, 1, stdout);
