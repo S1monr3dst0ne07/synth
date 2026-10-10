@@ -29,11 +29,11 @@ typedef struct
 } env_t;
 
 env_t env_main = {
-	.time_attack  = 0.1,
+	.time_attack  = 0.2,
 	.time_decay   = 0.1,
-	.time_release = 0.2,
+	.time_release = 0.5,
 
-	.ampl_sustain = 0.8,
+	.ampl_sustain = 1.0,
 	.ampl_start   = 1.0,
 };
 
@@ -86,8 +86,7 @@ typedef enum
 
 double oscilator(double time, double freq, osc_type type, double low_freq, double low_ampl)
 {
-	double skew = (freq * TAU) + low_ampl * sin(low_freq * TAU);
-	double mod  = skew * time;
+	double mod = (freq * TAU * time) + freq * low_ampl * sin(low_freq * TAU * time);
 
 	switch (type)
 	{
@@ -138,7 +137,7 @@ double ampl(double time, note_t* node, env_t* env)
 	switch (node->state)
 	{
 		case FSM_ATTACK : return perc * env->ampl_start;
-		case FSM_DECAY  : return env->ampl_start - (perc * (env->ampl_start + env->ampl_sustain));
+		case FSM_DECAY  : return env->ampl_start - (perc * (env->ampl_start - env->ampl_sustain));
 		case FSM_SUSTAIN: return env->ampl_sustain;
 		case FSM_RELEASE: return env->ampl_sustain * (1.0 - perc);
 		case FSM_DEAD   : return 0.0;
@@ -152,8 +151,11 @@ double synth_note(double time, note_t* node, env_t* env)
 
 	double amplitude = ampl(time, node, env);
 
-	double freq      = scale_to_freq(node->number);
-	double sound     = oscilator(time, freq, OSC_SINE, 0, 0);
+	uint8_t scale = node->number;
+	double sound     = 
+		1.0  * oscilator(time, scale_to_freq(scale), OSC_SINE, 5.0, 0.001) +
+		0.5  * oscilator(time, scale_to_freq(scale+12), OSC_SINE, 0, 0) +
+		0.25 * oscilator(time, scale_to_freq(scale+24), OSC_SINE, 0, 0) ;
 	
 	return amplitude * sound;
 }
@@ -162,19 +164,17 @@ double synth_note(double time, note_t* node, env_t* env)
 int16_t synth_sample(double time)
 {
 	note_t* iter = root.next;
-
-	double count = 0;
 	double sum   = 0;
 
 	while (iter)
 	{
 		sum += synth_note(time, iter, &env_main);
-		count += 1.0;
 
 		iter = iter->next;
 	}
 
-	double sample = sum / count;
+	double sample = sum * 0.2;
+	if (sample > 1.0) sample = 1.0;
 
 	int16_t sample_quant = (int16_t)(sample * ((1 << 15) - 1));
 	return sample_quant;
