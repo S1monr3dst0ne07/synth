@@ -40,11 +40,11 @@ fn main()
 
 	put main_env = Chunk::New(Env);
 	put main_env.Env::TIME_ATTACK  = 0.05;
-	put main_env.Env::TIME_DECAY   = 0.2;
-	put main_env.Env::TIME_RELEASE = 0.7;
+	put main_env.Env::TIME_DECAY   = 0.7;
+	put main_env.Env::TIME_RELEASE = 0.1;
 
 	put main_env.Env::AMPL_START   = 1.0;
-	put main_env.Env::AMPL_SUSTAIN = 0.8;
+	put main_env.Env::AMPL_SUSTAIN = 0.3;
 
 	static Note ~ root;
 

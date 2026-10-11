@@ -40,12 +40,26 @@ fn Synth::Note(time, note, env)
 	jump dead ~ (note.Note::STATE) == (Note::State::DEAD);
 
 
-	put ampl  = Synth::Ampl(time, note, env);
-	put scale = (note.Note::NUMBER) ~- 12;
+	put ampl   = Synth::Ampl(time, note, env);
+	put bright = ampl ~* ampl ~* ampl;
+	put scale  = (note.Note::NUMBER) ~- 12;
+
+	put base = Synth::ScaleToFreq(scale);
 	put sound = 
-		((1.0) ~* Osc(time, Synth::ScaleToFreq(scale   ), Osc::Kind::SINE, 5.0, 0.01)) ~+
-		((0.5) ~* Osc(time, Synth::ScaleToFreq(scale+12), Osc::Kind::SINE, 1.0, 0.01))  ~+
-		((0.1) ~* Osc(time, Synth::ScaleToFreq(scale+24), Osc::Kind::SQUARE, 0.0, 0.0))   ;
+
+		// sound pretty nice idk.
+		//((1.0) ~* Osc(time, Synth::ScaleToFreq(scale   ), Osc::Kind::SINE, 5.0, 0.01))  ~+
+		//((0.5) ~* Osc(time, Synth::ScaleToFreq(scale+12), Osc::Kind::SINE, 1.0, 0.01))  ~+
+		//((0.1) ~* Osc(time, Synth::ScaleToFreq(scale+24), Osc::Kind::SQUARE, 0.0, 0.0))  ;
+
+		// piano (maybe)
+		((1.00) ~* Osc(time, base ~* (1.0), Osc::Kind::SINE, 10.0, 0.001)) ~+
+
+		((0.45) ~* Float::IntPow(bright, 1) ~* Osc(time, base ~* (2.002), Osc::Kind::SINE, 0.0, 0.0)) ~+
+		((0.20) ~* Float::IntPow(bright, 2) ~* Osc(time, base ~* (3.010), Osc::Kind::SINE, 0.0, 0.0)) ~+
+		((0.12) ~* Float::IntPow(bright, 3) ~* Osc(time, base ~* (4.025), Osc::Kind::SINE, 0.0, 0.0)) ~+
+		((0.07) ~* Float::IntPow(bright, 4) ~* Osc(time, base ~* (5.050), Osc::Kind::SINE, 0.0, 0.0)) ;
+		
 
 	return ampl ~* sound;
 
