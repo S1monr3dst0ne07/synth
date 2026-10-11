@@ -77,4 +77,23 @@ fn Note::Find(root, number)
 	return Mem::NULL;
 }
 
+fn Note::GC(iter)
+{
+	lab loop;
+		put prev = iter;
+		put iter = iter.Note::NEXT;
+		jump done ~ iter == Mem::NULL;
+		jump loop ~ (iter.Note::STATE) != Note::State::DEAD;
+
+		put prev.Note::NEXT = iter.Note::NEXT;
+		Chunk::Void(iter);
+		put iter = prev;
+
+		jump loop;
+	lab done;
+
+}
+
+
+
 
