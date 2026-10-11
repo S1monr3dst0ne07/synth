@@ -48,6 +48,9 @@ fn Note::Update(time, note, env)
 	put elapse = time ~- (note.Note::TIME);
 	put limit  = Env::LookupTime(env, state);
 
+	// dont update dead notes (obviously)
+	jump done ~ state == Note::State::DEAD;
+
 	jump time_trigger ~ (elapse ~> limit) & (limit ~> (0.0));
 	jump play_trigger ~ 
 		(note.Note::RELEASED) &
