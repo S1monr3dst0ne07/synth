@@ -64,13 +64,12 @@ lab play_trigger;
 lab done;
 }
 
-fn Note::Find(root, number)
+fn Note::Find(iter, number)
 {
-	put iter = root.Note::NEXT;
 	lab loop;
+		put iter = iter.Note::NEXT;
 		jump done ~ iter == Mem::NULL;
-
-		jump loop ~ iter.Note::NUMBER != number;
+		jump loop ~ (iter.Note::NUMBER) != number;
 		return iter;
 	lab done;
 
