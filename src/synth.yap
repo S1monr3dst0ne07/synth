@@ -42,7 +42,7 @@ fn Synth::Note(time, note, env)
 
 	put ampl   = Synth::Ampl(time, note, env);
 	put bright = ampl ~* ampl ~* ampl;
-	put scale  = (note.Note::NUMBER) ~- 12;
+	put scale  = (note.Note::NUMBER) - 0;
 
 	put base = Synth::ScaleToFreq(scale);
 	put sound = 
@@ -82,7 +82,7 @@ fn Synth::Sample(time, root, env)
 		jump loop;
 	lab done;
 
-	put sample = sum ~* (0.2);
+	put sample = sum ~* (0.1);
 	jump normal ~ sample ~< (1.0);
 		put sample = 1.0;
 	lab normal;
