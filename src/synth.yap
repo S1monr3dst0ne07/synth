@@ -50,4 +50,31 @@ lab dead;
 }
 
 
+fn Synth::Sample(time, root, env)
+{
+	put iter = root.Note::NEXT;
+	put sum  = 0.0;
+
+	lab loop;
+		jump done ~ iter == Mem::NULL;
+
+		put sum = sum ~+ Synth::Note(time, iter, env);
+		put iter = iter.Note::NEXT;
+
+		jump loop;
+	lab done;
+
+	put sample = sum ~* (0.2);
+	jump normal ~ sample ~< (1.0);
+		put sample = 1.0;
+	lab normal;
+
+	put sample_scaled    = sample ~* (32767.0);
+	put sample_quantized = Float::ToSigned(sample_scaled);
+	put sample_truncated = sample_quantized & 65535;
+
+	return sample_truncated;
+}
+
+
 
