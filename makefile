@@ -1,7 +1,11 @@
 
 
-run: build
-	 adapt/virt-keyboard.sh | ./main | ./adapt/vban
+run: build-yascl
+	#./synth
+	 adapt/virt-keyboard.sh | ./synth | ./adapt/vban
 
-build:
-	gcc -g3 main.c -o main -lm
+build-yascl:
+	./yascl src/main.yap ./synth
+
+build-c:
+	gcc -g3 main.c -o synth -lm
