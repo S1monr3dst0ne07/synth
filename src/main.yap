@@ -53,7 +53,7 @@ fn main()
 		put index = index + 1;
 
 		Midi::Process(time, root);
-		//Note::GC(root);
+		Note::GC(root);
 
 		put sample16 = Synth::Sample(time, root, main_env);
 		send_pcm_sample(sample16);
