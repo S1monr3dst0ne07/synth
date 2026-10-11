@@ -39,11 +39,12 @@ fn main()
 	put index = 0;
 
 	put main_env = Chunk::New(Env);
-	put main_env.Env::TIME_ATTACK  = 1.0;
-	put main_env.Env::TIME_DECAY   = 1.0;
-	put main_env.Env::TIME_RELEASE = 0.5;
+	put main_env.Env::TIME_ATTACK  = 0.05;
+	put main_env.Env::TIME_DECAY   = 0.2;
+	put main_env.Env::TIME_RELEASE = 0.7;
+
 	put main_env.Env::AMPL_START   = 1.0;
-	put main_env.Env::AMPL_SUSTAIN = 0.0;
+	put main_env.Env::AMPL_SUSTAIN = 0.8;
 
 	static Note ~ root;
 
@@ -52,7 +53,7 @@ fn main()
 		put index = index + 1;
 
 		Midi::Process(time, root);
-		Note::GC(root);
+		//Note::GC(root);
 
 		put sample16 = Synth::Sample(time, root, main_env);
 		send_pcm_sample(sample16);

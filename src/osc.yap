@@ -25,10 +25,16 @@ fn Osc(time, freq, kind, low_freq, low_ampl)
 	put mod = (tau  ~* freq ~* time) ~+ 
 	          (freq ~* low_ampl ~* Osc::Sin(low_freq ~* time ~* tau));
 
-	jump sine ~ kind == Osc::Kind::SINE;
+	jump sine   ~ kind == Osc::Kind::SINE;
+	jump square ~ kind == Osc::Kind::SQUARE;
 
-lab sine;
-	return Osc::Sin(mod);
+lab sine;   return Osc::Sin(mod);
+lab square; 
+	jump on ~ Osc::Sin(mod) ~> 1;
+	jump off;
+
+	lab on;  return          (1.0);
+	lab off; return (0.0) ~- (1.0);
 }
 
 

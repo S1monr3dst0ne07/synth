@@ -39,9 +39,13 @@ fn Synth::Note(time, note, env)
 	Note::Update(time note, env);
 	jump dead ~ (note.Note::STATE) == (Note::State::DEAD);
 
+
 	put ampl  = Synth::Ampl(time, note, env);
 	put scale = (note.Note::NUMBER) ~- 12;
-	put sound = Osc(time, Synth::ScaleToFreq(scale), Osc::Kind::SINE, 0.0, 0.0);
+	put sound = 
+		((1.0) ~* Osc(time, Synth::ScaleToFreq(scale   ), Osc::Kind::SINE, 5.0, 0.01)) ~+
+		((0.5) ~* Osc(time, Synth::ScaleToFreq(scale+12), Osc::Kind::SINE, 1.0, 0.01))  ~+
+		((0.1) ~* Osc(time, Synth::ScaleToFreq(scale+24), Osc::Kind::SQUARE, 0.0, 0.0))   ;
 
 	return ampl ~* sound;
 
