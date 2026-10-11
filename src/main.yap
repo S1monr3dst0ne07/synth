@@ -3,6 +3,7 @@ use "lib/float.yap"
 use "lib/io.yap"
 
 use "src/synth.yap"
+use "src/midi.yap"
 
 seq Config
 {
@@ -46,20 +47,11 @@ fn main()
 
 	static Note ~ root;
 
-	put note = Note::New(0.0, 69);
-	Note::Link(root, note);
-
-	put note = Note::New(0.0, 69 + 12);
-	Note::Link(root, note);
-
-	put note = Note::New(0.0, 69 + 24);
-	Note::Link(root, note);
-
 	lab loop;
 		put time = Float::FromInt(index) ~/ Float::FromInt(Config::RATE);
 		put index = index + 1;
 
-		//process_midi(sample_time);
+		Midi::Process(time, root);
 		//gc();
 
 		put sample16 = Synth::Sample(time, root, main_env);
