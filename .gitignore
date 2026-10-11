@@ -1,0 +1,7 @@
+# yascl stuff
+lib
+yascl
+
+# executable
+synth
+adapt/vban
